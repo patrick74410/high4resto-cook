@@ -1,10 +1,13 @@
 import { Component } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
-  selector: 'app-root',
+  selector: 'wsa-root',
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+  styleUrls: ['./app.component.scss']
 })
 export class AppComponent {
-  title = 'high4resto-coldCook';
+  constructor(public dialog: MatDialog) {}
+
+
 }
