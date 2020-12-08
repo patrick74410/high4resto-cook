@@ -17,7 +17,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "outputPath": "dist/web-speech-angular",
+            "outputPath": "dist/high4resto-cook",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": "src/polyfills.ts",
@@ -55,7 +55,7 @@
                 {
                   "type": "initial",
                   "maximumWarning": "500kb",
-                  "maximumError": "1mb"
+                  "maximumError": "5mb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -71,18 +71,18 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "web-speech-angular:build"
+            "browserTarget": "high4resto-cook:build"
           },
           "configurations": {
             "production": {
-              "browserTarget": "web-speech-angular:build:production"
+              "browserTarget": "high4resto-cook:build:production"
             }
           }
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "web-speech-angular:build"
+            "browserTarget": "high4resto-cook:build"
           }
         },
         "test": {
@@ -122,11 +122,11 @@
           "builder": "@angular-devkit/build-angular:protractor",
           "options": {
             "protractorConfig": "e2e/protractor.conf.js",
-            "devServerTarget": "web-speech-angular:serve"
+            "devServerTarget": "high4resto-cook:serve"
           },
           "configurations": {
             "production": {
-              "devServerTarget": "web-speech-angular:serve:production"
+              "devServerTarget": "high4resto-cook:serve:production"
             }
           }
         },

@@ -5,7 +5,7 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from './shared/shared.module';
-import { WebSpeechModule } from './web-speech/web-speech.module';
+import { High4RestoCookModule } from './high4restoCook/high4restoCook.module';
 import {MessagesComponent} from './shared/messages/messages.component'
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { JwtInterceptor } from './shared/services/Auth/jwt-interceptor.service';
@@ -26,7 +26,7 @@ import { environment } from '../environments/environment';
     BrowserAnimationsModule,
     SharedModule,
     FormsModule,
-    WebSpeechModule,
+    High4RestoCookModule,
     HttpClientModule,
     ReactiveFormsModule,
     MaterialModule,

@@ -10,7 +10,7 @@ describe('workspace-project App', () => {
 
   it('should display welcome message', () => {
     page.navigateTo();
-    expect(page.getTitleText()).toEqual('web-speech-angular app is running!');
+    expect(page.getTitleText()).toEqual('high4resto-cook app is running!');
   });
 
   afterEach(async () => {
