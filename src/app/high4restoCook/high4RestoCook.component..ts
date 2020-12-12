@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, EventEmitter, ChangeDetectorRef } from '@angular/core';
-import {  merge, Observable, of, Subject} from 'rxjs';
-import { map,  take, tap } from 'rxjs/operators';
+import { fromEvent, merge, Observable, of, Subject } from 'rxjs';
+import { delay, map, take, tap } from 'rxjs/operators';
 import { defaultLanguage, languages } from '../shared/model/languages';
 import { SpeechError } from '../shared/model/speech-error';
 import { SpeechEvent } from '../shared/model/speech-event';
@@ -19,9 +19,9 @@ import { Socket } from '../shared/services/Socket';
 import { Message } from '../shared/model/interfaces/Message';
 import { AuthentificationService } from '../shared/services/Auth/authentification.service';
 import { ExpireService } from '../shared/services/expire.service';
-import { SpeechSynthesizerService } from '../shared/services/web-apis/speech-synthesizer.service';
 import { VCommandeI } from '../shared/model/interfaces/VCommande';
 import { VocalText } from '../shared/model/VocalText';
+import {cloneDeep} from 'lodash';
 
 const groupBy = <T, K extends keyof any>(list: T[], getKey: (item: T) => K) =>
   list.reduce((previous, currentItem) => {
@@ -39,12 +39,12 @@ const groupBy = <T, K extends keyof any>(list: T[], getKey: (item: T) => K) =>
 })
 
 export class High4RestoCookComponent implements OnInit {
-  vocalText:VocalText=new VocalText();
-  ROLE=environment.role;
+  vocalText: VocalText = new VocalText();
+  ROLE = environment.role;
   languages: string[] = languages;
   currentLanguage: string = defaultLanguage;
   totalTranscript?: string;
-  title=environment.tilte;
+  title = environment.tilte;
 
   transcript$?: Observable<string>;
   listening$?: Observable<boolean>;
@@ -60,6 +60,42 @@ export class High4RestoCookComponent implements OnInit {
   util = new Util();
   commandes: VCommandeI[] = [];
   command: string = "";
+
+  sound: HTMLAudioElement = new Audio();
+  soundBuffer: string[] = [];
+
+
+  generateAnnonce(signals:Signal[]):void
+  {
+    var annonce:string="";
+    for(let signal of signals)
+    {
+      if(signal.items.length>0)
+      {
+        annonce+="J'annonce pour la table "+signal.tableName+"."
+        signal.items.forEach(item=>{
+          annonce+=item.count+" "+item.name+".";
+        });
+      }
+    }
+    this.talk(annonce);
+  }
+
+  generateEnvoie(signals:Signal[]):void
+  {
+    var annonce:string="";
+    for(let signal of signals)
+    {
+      if(signal.items.length>0)
+      {
+        annonce+="Je demande l'envoie pour la table "+signal.tableName+"."
+        signal.items.forEach(item=>{
+          annonce+=item.count+" "+item.name+".";
+        });
+      }
+    }
+    this.talk(annonce);
+  }
 
   callServer(msg?: string): void {
     const message: Message = { type: "call", function: "Vous êtes appelé en cuisine" };
@@ -87,7 +123,7 @@ export class High4RestoCookComponent implements OnInit {
 
   prepareAllProduct(productName: string): void {
     this.preparateurService.getToTakeOrder(this.ROLE).pipe(take(1)).subscribe(result => {
-      var tpOrders: OrderI[] = result.filter(result => result.preOrder.stock.item.name+" "+result.annonce == productName);
+      var tpOrders: OrderI[] = result.filter(result => result.preOrder.stock.item.name + " " + result.annonce == productName);
       for (let order of tpOrders) {
         this.prepare(order);
       }
@@ -250,83 +286,71 @@ export class High4RestoCookComponent implements OnInit {
     this.commandes.push({ commande: "Annuler", action: "" } as VCommandeI);
     this.commandes.push({ commande: "Merci", action: "" } as VCommandeI);
 
-    for(let text of this.vocalText.callServerAll)
-    {
+    for (let text of this.vocalText.callServerAll) {
       this.commandes.push({ commande: text, action: "callServer:all" } as VCommandeI);
     }
-    for(let text of this.vocalText.resumeSignaled)
-    {
+    for (let text of this.vocalText.resumeSignaled) {
       this.commandes.push({ commande: text, action: "resume:signaled" } as VCommandeI);
     }
-    for(let text of this.vocalText.resumeToTakebyTable)
-    {
-      this.commandes.push({ commande: text, action: "resume:toTakebyTable"} as VCommandeI);
+    for (let text of this.vocalText.resumeToTakebyTable) {
+      this.commandes.push({ commande: text, action: "resume:toTakebyTable" } as VCommandeI);
 
     }
-    for(let text of this.vocalText.resumeToTakeByProduct)
-    {
+    for (let text of this.vocalText.resumeToTakeByProduct) {
       this.commandes.push({ commande: text, action: "resume:toTakeByProduct" } as VCommandeI);
     }
 
     for (let products of this.toTakeProducts) {
-      for(let text of this.vocalText.prepareItem)
-      {
-        text=text.replace("$product",products.productName);
+      for (let text of this.vocalText.prepareItem) {
+        text = text.replace("$product", products.productName);
         this.commandes.push({ commande: text, action: "prepareItem:" + products.productName } as VCommandeI);
       }
     }
     for (let tables of this.toTakes) {
-      for(let text of this.vocalText.prepareTable)
-      {
-        text=text.replace("$table",tables.tableName);
+      for (let text of this.vocalText.prepareTable) {
+        text = text.replace("$table", tables.tableName);
         this.commandes.push({ commande: text, action: "prepareTable:" + tables.tableName } as VCommandeI);
       }
 
       var predessessor: string = "";
       for (let item of tables.items) {
-        var current = item.preOrder.stock.item.name+" "+item.annonce;
+        var current = item.preOrder.stock.item.name + " " + item.annonce;
         if (predessessor != current) {
           predessessor = current;
-          for(let text of this.vocalText.prepare)
-          {
-            text=text.replace("$product",current).replace("$table",tables.tableName);
+          for (let text of this.vocalText.prepare) {
+            text = text.replace("$product", current).replace("$table", tables.tableName);
             this.commandes.push({ commande: text, action: "prepare:" + current + ";" + tables.tableName } as VCommandeI);
           }
-          for(let text of this.vocalText.prepareOnly)
-          {
-            text=text.replace("$product",current).replace("$table",tables.tableName);
+          for (let text of this.vocalText.prepareOnly) {
+            text = text.replace("$product", current).replace("$table", tables.tableName);
             this.commandes.push({ commande: text, action: "prepareOnly:" + current + ";" + tables.tableName } as VCommandeI);
           }
         }
       }
     }
     for (let products of this.toPrepareProducts) {
-      for(let text of this.vocalText.finishAllProduct)
-      {
-        text=text.replace("$product",products.productName);
+      for (let text of this.vocalText.finishAllProduct) {
+        text = text.replace("$product", products.productName);
         this.commandes.push({ commande: text, action: "finishAllProduct:" + products.productName } as VCommandeI);
       }
 
     }
     for (let table of this.toPrepares) {
-      for(let text of this.vocalText.finishAllTable)
-      {
-        text=text.replace("$table",table.tableName)
+      for (let text of this.vocalText.finishAllTable) {
+        text = text.replace("$table", table.tableName)
         this.commandes.push({ commande: text, action: "finishAllTable:" + table.tableName } as VCommandeI);
       }
       var predessessor: string = "";
       for (let item of table.items) {
-        var current = item.order.preOrder.stock.item.name+" "+item.order.annonce;
+        var current = item.order.preOrder.stock.item.name + " " + item.order.annonce;
         if (predessessor != current) {
           predessessor = current;
-          for(let text of this.vocalText.finishAll)
-          {
-            text=text.replace("$product",current).replace("$table",table.tableName)
+          for (let text of this.vocalText.finishAll) {
+            text = text.replace("$product", current).replace("$table", table.tableName)
             this.commandes.push({ commande: text, action: "finishAll:" + current + ";" + table.tableName } as VCommandeI);
           }
-          for(let text of this.vocalText.finishOne)
-          {
-            text=text.replace("$product",current).replace("$table",table.tableName);
+          for (let text of this.vocalText.finishOne) {
+            text = text.replace("$product", current).replace("$table", table.tableName);
             this.commandes.push({ commande: text, action: "finishOne:" + current + ";" + table.tableName } as VCommandeI);
           }
         }
@@ -334,10 +358,31 @@ export class High4RestoCookComponent implements OnInit {
     }
   }
 
-
+private talk(commande: string)
+{
+  this.preparateurService.speak(commande).pipe(take(1)).subscribe(audio=>{
+    this.soundBuffer.push(environment.apiUrl + '/serveur/download/' + audio.gridId);
+    if (!(this.sound.duration > 0 && !this.sound.paused)) {
+      this.sound.src = this.soundBuffer.pop();
+      var that = this.sound;
+      var thot=this;
+      this.sound.onloadeddata = function () {
+        that.play();
+        that.addEventListener('ended', function () {
+          var that = this;
+          if (thot.soundBuffer.length > 0) {
+            this.src = thot.soundBuffer.pop();
+            this.onloadeddata = function () {
+              that.play();
+            }
+          }
+        })
+      }
+    }
+  })
+}
 
   constructor(
-    private talk: SpeechSynthesizerService,
     private messageService: MessageService, private preparateurService: PreparateurService,
     private speechRecognizer: SpeechRecognizerService, private authenticationService: AuthentificationService, private change: ChangeDetectorRef,
     private expire: ExpireService
@@ -345,9 +390,7 @@ export class High4RestoCookComponent implements OnInit {
 
   }
 
-
   ngOnInit(): void {
-    this.talk.initSynthesis();
     this.expire.check();
     const High4RestoCookReady = this.speechRecognizer.initialize(this.currentLanguage);
     if (High4RestoCookReady) {
@@ -359,9 +402,29 @@ export class High4RestoCookComponent implements OnInit {
     var listener: EventEmitter<any> = new EventEmitter();
     this.initAllData();
     listener = socket.getEventListener();
-    this.audioFlux.subscribe({
-      next: (audio) => new Audio(environment.apiUrl + "/serveur/download/" + audio).play()
+    this.audioFlux.pipe(delay(3000)).subscribe({
+      next: (audio) => {
+        this.soundBuffer.push(environment.apiUrl + '/serveur/download/' + audio);
+        if (!(this.sound.duration > 0 && !this.sound.paused)) {
+          this.sound.src = this.soundBuffer.pop();
+          var that = this.sound;
+          var thot=this;
+          this.sound.onloadeddata = function () {
+            that.play();
+            that.addEventListener('ended', function () {
+              var that = this;
+              if (thot.soundBuffer.length > 0) {
+                this.src = thot.soundBuffer.pop();
+                this.onloadeddata = function () {
+                  that.play();
+                }
+              }
+            })
+          }
+        }
+      }
     });
+
     listener.subscribe((event: { type: string; data: string; }) => {
       if (event.type == "message") {
         var txt: string = event.data;
@@ -369,11 +432,78 @@ export class High4RestoCookComponent implements OnInit {
         var value: string = txt.split(":")[1];
         if (command == "audio")
           this.audioFlux.next(value);
-        if (command == "update") {
-          this.change.detectChanges();
-          this.initSignal();
-          this.initToTake();
+        else if (command == "update") {
+          if(value=="annonce")
+          {
+            var oldAnnonce:Signal[];
+            oldAnnonce=Object.assign([], this.signals);
+            this.preparateurService.getSignalOrder(this.ROLE).pipe(take(1)).subscribe(result => {
+              this.signals = [];
+              var tpRecord: Record<string, OrderI[]> = groupBy(result, i => i.preOrder.destination);
+              for (let key in tpRecord) {
+                var tpTable = new Signal();
+                tpTable.tableName = key;
 
+                var reduce = tpRecord[key].reduce((a, b) => {
+                  var name: string = b.preOrder.stock.item.name + " " + b.annonce;
+                  if (!a.hasOwnProperty(name)) {
+                    a[name] = 0;
+                  }
+                  a[name]++;
+                  return a;
+                }, {});
+
+                var reducesExtended = Object.keys(reduce).map(k => {
+                  return { name: k, count: reduce[k] } as NameCountI;
+                });
+
+                for (let nc in reducesExtended) {
+                  tpTable.items.push(reducesExtended[nc]);
+                }
+
+                this.signals.push(tpTable);
+              }
+              this.change.detectChanges();
+              this.generateAnnonce(this.preparateurService.diffSignal(this.signals,oldAnnonce))
+            });
+
+          }
+          else if(value=="envoie")
+          {
+            var oldAnnonce=cloneDeep(this.signals);
+            this.preparateurService.getSignalOrder(this.ROLE).pipe(take(1)).subscribe(result => {
+              this.signals = [];
+              var tpRecord: Record<string, OrderI[]> = groupBy(result, i => i.preOrder.destination);
+              for (let key in tpRecord) {
+                var tpTable = new Signal();
+                tpTable.tableName = key;
+
+                var reduce = tpRecord[key].reduce((a, b) => {
+                  var name: string = b.preOrder.stock.item.name + " " + b.annonce;
+                  if (!a.hasOwnProperty(name)) {
+                    a[name] = 0;
+                  }
+                  a[name]++;
+                  return a;
+                }, {});
+
+                var reducesExtended = Object.keys(reduce).map(k => {
+                  return { name: k, count: reduce[k] } as NameCountI;
+                });
+
+                for (let nc in reducesExtended) {
+                  tpTable.items.push(reducesExtended[nc]);
+                }
+
+                this.signals.push(tpTable);
+              }
+              this.change.detectChanges();
+              this.generateEnvoie(this.preparateurService.diffSignal(oldAnnonce,this.signals));
+            });
+
+            this.change.detectChanges();
+            this.initToTake();
+          }
         }
       }
       if (event.type == "open") {
@@ -383,12 +513,11 @@ export class High4RestoCookComponent implements OnInit {
         console.log("Connexion close");
       }
     });
-    setInterval(()=> {this.verifyMic() },1000);
+    setInterval(() => { this.verifyMic() }, 1000);
   }
 
-  verifyMic():void{
-    if(!this.speechRecognizer.isListening)
-    {
+  verifyMic(): void {
+    if (!this.speechRecognizer.isListening) {
       this.defaultError$.next(undefined);
       this.speechRecognizer.start();
     }
@@ -459,7 +588,7 @@ export class High4RestoCookComponent implements OnInit {
       this.toTakeProducts.forEach(toProduct => {
         resume += toProduct.count + ".." + toProduct.productName + "..."
       })
-      this.talk.speak(resume);
+      this.talk(resume);
     }
     if (action == "toTakebyTable") {
 
@@ -497,7 +626,7 @@ export class High4RestoCookComponent implements OnInit {
           })
           resume += ".";
         });
-        this.talk.speak(resume);
+        this.talk(resume);
       });
     }
 
@@ -510,7 +639,7 @@ export class High4RestoCookComponent implements OnInit {
         })
           + ".";
       })
-      this.talk.speak(resume);
+      this.talk(resume);
     }
   }
 
@@ -519,7 +648,7 @@ export class High4RestoCookComponent implements OnInit {
     var action: string = command.split(':')[1];
 
     if (commande == "callServer") {
-      this.talk.speak("J'apelle le serveur pour qu'il ou elle vienne en cuisine");
+      this.talk("J'apelle le serveur pour qu'il ou elle vienne en cuisine");
       this.callServer();
     }
 
@@ -529,62 +658,57 @@ export class High4RestoCookComponent implements OnInit {
 
     else if (commande == "prepareItem") {
       this.prepareAllProductWithLongName(action);
-      this.talk.speak("Tous les " + action + " sont mis dans la préparation");
+      this.talk("Tous les " + action + " sont mis dans la préparation");
     }
     else if (commande == "prepareTable") {
       this.prepareAllTableWithTableName(action);
-      this.talk.speak("Tous les éléments de la table " + action + " ont été mis dans la préparation");
+      this.talk("Tous les éléments de la table " + action + " ont été mis dans la préparation");
     }
     else if (commande == "prepare") {
       var product: string = action.split(';')[0];
       var table: string = action.split(';')[1];
       this.toTakes.filter(a => a.tableName == table).forEach(toTake => {
         toTake.items.filter(a => {
-          if (a.preOrder.stock.item.name+" "+a.annonce == product)
+          if (a.preOrder.stock.item.name + " " + a.annonce == product)
             return true;
         }).forEach(finalItem => {
           this.prepare(finalItem);
         })
       })
-      this.talk.speak("La demande a été exécutée");
+      this.talk("La demande a été exécutée");
     }
     else if (commande == "prepareOnly") {
       var product: string = action.split(';')[0];
       var table: string = action.split(';')[1];
       this.toTakes.filter(a => a.tableName == table).forEach(toTake => {
         this.prepare(toTake.items.filter(a => {
-          if (a.preOrder.stock.item.name+" "+a.annonce == product)
+          if (a.preOrder.stock.item.name + " " + a.annonce == product)
             return true;
         })[0]);
       })
-      this.talk.speak("La demande a été exécutée");
+      this.talk("La demande a été exécutée");
     }
-    else if (commande == "finishAllProduct")
-    {
+    else if (commande == "finishAllProduct") {
       this.finishAllProduct(action);
-      this.talk.speak("La demande a été exécutée");
+      this.talk("La demande a été exécutée");
     }
-    else if (commande=="finishAllTable")
-    {
-      this.toPrepares.filter(a=>a.tableName==action)[0].items.forEach(item=>this.finish(item));
-      this.talk.speak("La demande a été exécutée");
+    else if (commande == "finishAllTable") {
+      this.toPrepares.filter(a => a.tableName == action)[0].items.forEach(item => this.finish(item));
+      this.talk("La demande a été exécutée");
     }
-    else if (commande=="finishAll")
-    {
-      var product:string=action.split(';')[0];
-      var table:string=action.split(';')[1];
-      this.toPrepares.filter(a=>a.tableName==table)[0].items.filter(a=>a.order.preOrder.stock.item.name+" "+a.order.annonce==product).forEach(item=>this.finish(item));
+    else if (commande == "finishAll") {
+      var product: string = action.split(';')[0];
+      var table: string = action.split(';')[1];
+      this.toPrepares.filter(a => a.tableName == table)[0].items.filter(a => a.order.preOrder.stock.item.name + " " + a.order.annonce == product).forEach(item => this.finish(item));
     }
-    else if (commande=="finishOne")
-    {
+    else if (commande == "finishOne") {
       console.log("i am here");;
-      var product:string=action.split(';')[0];
-      var table:string=action.split(';')[1];
-      this.finish(this.toPrepares.filter(a=>a.tableName==table)[0].items.filter(a=>a.order.preOrder.stock.item.name+" "+a.order.annonce==product)[0]);
+      var product: string = action.split(';')[0];
+      var table: string = action.split(';')[1];
+      this.finish(this.toPrepares.filter(a => a.tableName == table)[0].items.filter(a => a.order.preOrder.stock.item.name + " " + a.order.annonce == product)[0]);
     }
 
   }
-
 
   private processNotification(notification: SpeechNotification<string>): void {
     if (notification.event === SpeechEvent.FinalContent) {
@@ -601,7 +725,7 @@ export class High4RestoCookComponent implements OnInit {
         }
       });
       if (minscore > (notification.content.length / 3)) {
-        this.talk.speak("Je n'ai pas compris ce que vous me demandez");
+        this.talk("Je n'ai pas compris ce que vous me demandez");
       }
       else {
         if (finalNotif == "Comfirmer") {
@@ -611,10 +735,10 @@ export class High4RestoCookComponent implements OnInit {
           this.command = "";
         }
         else if (finalNotif == "Merci") {
-          this.talk.speak("De rien");
+          this.talk("De rien");
         }
         else {
-          this.talk.speak("Est ce que vous avez demandé " + finalNotif + ". Si vous voulez vous pouvez confirmer ou annuler");
+          this.talk("Est ce que vous avez demandé " + finalNotif + ". Si vous voulez vous pouvez confirmer ou annuler");
           this.command = commande;
         }
       }
