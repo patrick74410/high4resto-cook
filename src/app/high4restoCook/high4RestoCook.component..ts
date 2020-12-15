@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, EventEmitter, ChangeDetectorRef } from '@angular/core';
-import { fromEvent, merge, Observable, of, Subject } from 'rxjs';
+import { merge, Observable, of, Subject } from 'rxjs';
 import { delay, map, take, tap } from 'rxjs/operators';
 import { defaultLanguage, languages } from '../shared/model/languages';
 import { SpeechError } from '../shared/model/speech-error';
@@ -21,7 +21,7 @@ import { AuthentificationService } from '../shared/services/Auth/authentificatio
 import { ExpireService } from '../shared/services/expire.service';
 import { VCommandeI } from '../shared/model/interfaces/VCommande';
 import { VocalText } from '../shared/model/VocalText';
-import {cloneDeep} from 'lodash';
+import { cloneDeep } from 'lodash';
 
 const groupBy = <T, K extends keyof any>(list: T[], getKey: (item: T) => K) =>
   list.reduce((previous, currentItem) => {
@@ -65,32 +65,26 @@ export class High4RestoCookComponent implements OnInit {
   soundBuffer: string[] = [];
 
 
-  generateAnnonce(signals:Signal[]):void
-  {
-    var annonce:string="";
-    for(let signal of signals)
-    {
-      if(signal.items.length>0)
-      {
-        annonce+="J'annonce pour la table "+signal.tableName+"."
-        signal.items.forEach(item=>{
-          annonce+=item.count+" "+item.name+".";
+  generateAnnonce(signals: Signal[]): void {
+    var annonce: string = "";
+    for (let signal of signals) {
+      if (signal.items.length > 0) {
+        annonce += "J'annonce pour la table " + signal.tableName + "."
+        signal.items.forEach(item => {
+          annonce += item.count + " " + item.name + ".";
         });
       }
     }
     this.talk(annonce);
   }
 
-  generateEnvoie(signals:Signal[]):void
-  {
-    var annonce:string="";
-    for(let signal of signals)
-    {
-      if(signal.items.length>0)
-      {
-        annonce+="Je demande l'envoie pour la table "+signal.tableName+"."
-        signal.items.forEach(item=>{
-          annonce+=item.count+" "+item.name+".";
+  generateEnvoie(signals: Signal[]): void {
+    var annonce: string = "";
+    for (let signal of signals) {
+      if (signal.items.length > 0) {
+        annonce += "Je demande l'envoie pour la table " + signal.tableName + "."
+        signal.items.forEach(item => {
+          annonce += item.count + " " + item.name + ".";
         });
       }
     }
@@ -104,7 +98,7 @@ export class High4RestoCookComponent implements OnInit {
 
 
   prepare(order: OrderI): void {
-    var toPrepare: ToPrepareI = { order: order, inside: "", executor: this.authenticationService.userName, messageToNext: "" };
+    var toPrepare: ToPrepareI = { order: order, inside: "", executor: this.authenticationService.userName(), messageToNext: "" };
     this.preparateurService.moveToPrepare(toPrepare).pipe(take(1)).subscribe(toPrep => {
       this.initToPrepare();
       this.initToTake();
@@ -127,8 +121,11 @@ export class High4RestoCookComponent implements OnInit {
       for (let order of tpOrders) {
         this.prepare(order);
       }
-      this.initToPrepare();
-      this.initToTake();
+      var that= this;
+      setTimeout(function() {
+        that.initToPrepare();
+        that.initToTake();
+      },2000)
     })
   }
 
@@ -138,32 +135,45 @@ export class High4RestoCookComponent implements OnInit {
       for (let order of tpOrders) {
         this.prepare(order);
       }
-      this.initToPrepare();
-      this.initToTake();
+      var that= this;
+      setTimeout(function() {
+        that.initToPrepare();
+        that.initToTake();
+      },2000)
     })
   }
 
   finish(toPrepare: ToPrepareI): void {
     var prepare: PrepareI = { toPrepare: toPrepare, inside: "" };
     this.preparateurService.moveToPrepared(prepare).pipe(take(1)).subscribe(t => {
-      this.initToPrepare();
+
+      var message:Message={type:"update",function:"prepared"} as Message;
+      var that=this;
+      setTimeout(function() {that.preparateurService.callServer(message).pipe(take(1)).subscribe();that.initToPrepare();},1000)
+
     })
   }
 
   finishAllTable(toPrepare: ToPrepare): void {
     for (let item of toPrepare.items) {
-      this.finish(item);
-
+      var prepare: PrepareI = { toPrepare: item, inside: "" };
+      this.preparateurService.moveToPrepared(prepare).pipe(take(1)).subscribe();
     }
-  }
+    var message:Message={type:"update",function:"prepared"} as Message;
+    var that=this;
+    setTimeout(function() {that.preparateurService.callServer(message).pipe(take(1)).subscribe()},2000)
+}
 
   finishAllProduct(product: string): void {
     this.preparateurService.getToPrepare(this.ROLE).pipe(take(1)).subscribe(toPrepare => {
       toPrepare.filter(a => a.order.preOrder.stock.item.name + " " + a.order.annonce == product).forEach(toPrepare => {
-        this.finish(toPrepare);
-        this.initToPrepare();
+        var prepare: PrepareI = { toPrepare: toPrepare, inside: "" };
+        this.preparateurService.moveToPrepared(prepare).pipe(take(1)).subscribe();
       })
     })
+    var message:Message={type:"update",function:"prepared"} as Message;
+    var that=this;
+    setTimeout(function() {that.preparateurService.callServer(message).pipe(take(1)).subscribe();that.initToPrepare();},2000)
   }
 
   private initSignal(): void {
@@ -358,162 +368,27 @@ export class High4RestoCookComponent implements OnInit {
     }
   }
 
-private talk(commande: string)
-{
-  this.preparateurService.speak(commande).pipe(take(1)).subscribe(audio=>{
-    this.soundBuffer.push(environment.apiUrl + '/serveur/download/' + audio.gridId);
-    if (!(this.sound.duration > 0 && !this.sound.paused)) {
-      this.sound.src = this.soundBuffer.pop();
-      var that = this.sound;
-      var thot=this;
-      this.sound.onloadeddata = function () {
-        that.play();
-        that.addEventListener('ended', function () {
-          var that = this;
-          if (thot.soundBuffer.length > 0) {
-            this.src = thot.soundBuffer.pop();
-            this.onloadeddata = function () {
-              that.play();
+  private talk(commande: string):void {
+    this.preparateurService.speak(commande).pipe(take(1)).subscribe(audio => {
+      this.soundBuffer.push(environment.apiUrl + '/serveur/download/' + audio.gridId);
+      if (!(this.sound.duration > 0 && !this.sound.paused)) {
+        this.sound.src = this.soundBuffer.pop();
+        var that = this.sound;
+        var thot = this;
+        this.sound.onloadeddata = function () {
+          that.play();
+          that.addEventListener('ended', function () {
+            var that = this;
+            if (thot.soundBuffer.length > 0) {
+              this.src = thot.soundBuffer.pop();
+              this.onloadeddata = function () {
+                that.play();
+              }
             }
-          }
-        })
-      }
-    }
-  })
-}
-
-  constructor(
-    private messageService: MessageService, private preparateurService: PreparateurService,
-    private speechRecognizer: SpeechRecognizerService, private authenticationService: AuthentificationService, private change: ChangeDetectorRef,
-    private expire: ExpireService
-  ) {
-
-  }
-
-  ngOnInit(): void {
-    this.expire.check();
-    const High4RestoCookReady = this.speechRecognizer.initialize(this.currentLanguage);
-    if (High4RestoCookReady) {
-      this.initRecognition();
-    } else {
-      this.errorMessage$ = of('Votre navigateur ne supporte pas cette application');
-    }
-    var socket: Socket = new Socket(environment.socketColdCook)
-    var listener: EventEmitter<any> = new EventEmitter();
-    this.initAllData();
-    listener = socket.getEventListener();
-    this.audioFlux.pipe(delay(3000)).subscribe({
-      next: (audio) => {
-        this.soundBuffer.push(environment.apiUrl + '/serveur/download/' + audio);
-        if (!(this.sound.duration > 0 && !this.sound.paused)) {
-          this.sound.src = this.soundBuffer.pop();
-          var that = this.sound;
-          var thot=this;
-          this.sound.onloadeddata = function () {
-            that.play();
-            that.addEventListener('ended', function () {
-              var that = this;
-              if (thot.soundBuffer.length > 0) {
-                this.src = thot.soundBuffer.pop();
-                this.onloadeddata = function () {
-                  that.play();
-                }
-              }
-            })
-          }
+          });
         }
       }
     });
-
-    listener.subscribe((event: { type: string; data: string; }) => {
-      if (event.type == "message") {
-        var txt: string = event.data;
-        var command: string = txt.split(":")[0];
-        var value: string = txt.split(":")[1];
-        if (command == "audio")
-          this.audioFlux.next(value);
-        else if (command == "update") {
-          if(value=="annonce")
-          {
-            var oldAnnonce:Signal[];
-            oldAnnonce=Object.assign([], this.signals);
-            this.preparateurService.getSignalOrder(this.ROLE).pipe(take(1)).subscribe(result => {
-              this.signals = [];
-              var tpRecord: Record<string, OrderI[]> = groupBy(result, i => i.preOrder.destination);
-              for (let key in tpRecord) {
-                var tpTable = new Signal();
-                tpTable.tableName = key;
-
-                var reduce = tpRecord[key].reduce((a, b) => {
-                  var name: string = b.preOrder.stock.item.name + " " + b.annonce;
-                  if (!a.hasOwnProperty(name)) {
-                    a[name] = 0;
-                  }
-                  a[name]++;
-                  return a;
-                }, {});
-
-                var reducesExtended = Object.keys(reduce).map(k => {
-                  return { name: k, count: reduce[k] } as NameCountI;
-                });
-
-                for (let nc in reducesExtended) {
-                  tpTable.items.push(reducesExtended[nc]);
-                }
-
-                this.signals.push(tpTable);
-              }
-              this.change.detectChanges();
-              this.generateAnnonce(this.preparateurService.diffSignal(this.signals,oldAnnonce))
-            });
-
-          }
-          else if(value=="envoie")
-          {
-            var oldAnnonce=cloneDeep(this.signals);
-            this.preparateurService.getSignalOrder(this.ROLE).pipe(take(1)).subscribe(result => {
-              this.signals = [];
-              var tpRecord: Record<string, OrderI[]> = groupBy(result, i => i.preOrder.destination);
-              for (let key in tpRecord) {
-                var tpTable = new Signal();
-                tpTable.tableName = key;
-
-                var reduce = tpRecord[key].reduce((a, b) => {
-                  var name: string = b.preOrder.stock.item.name + " " + b.annonce;
-                  if (!a.hasOwnProperty(name)) {
-                    a[name] = 0;
-                  }
-                  a[name]++;
-                  return a;
-                }, {});
-
-                var reducesExtended = Object.keys(reduce).map(k => {
-                  return { name: k, count: reduce[k] } as NameCountI;
-                });
-
-                for (let nc in reducesExtended) {
-                  tpTable.items.push(reducesExtended[nc]);
-                }
-
-                this.signals.push(tpTable);
-              }
-              this.change.detectChanges();
-              this.generateEnvoie(this.preparateurService.diffSignal(oldAnnonce,this.signals));
-            });
-
-            this.change.detectChanges();
-            this.initToTake();
-          }
-        }
-      }
-      if (event.type == "open") {
-        console.log("Connexion open");
-      }
-      if (event.type == "close") {
-        console.log("Connexion close");
-      }
-    });
-    setInterval(() => { this.verifyMic() }, 1000);
   }
 
   verifyMic(): void {
@@ -745,6 +620,138 @@ private talk(commande: string)
 
     }
   }
+  constructor(
+    private messageService: MessageService, private preparateurService: PreparateurService,
+    private speechRecognizer: SpeechRecognizerService, private authenticationService: AuthentificationService, private change: ChangeDetectorRef,
+    private expire: ExpireService
+  ) {
+
+  }
+
+  ngOnInit(): void {
+    this.expire.check();
+    const High4RestoCookReady = this.speechRecognizer.initialize(this.currentLanguage);
+    if (High4RestoCookReady) {
+      this.initRecognition();
+    } else {
+      this.errorMessage$ = of('Votre navigateur ne supporte pas cette application');
+    }
+    var socket: Socket = new Socket(environment.socketColdCook)
+    var listener: EventEmitter<any> = new EventEmitter();
+    this.initAllData();
+    listener = socket.getEventListener();
+    this.audioFlux.pipe(delay(3000)).subscribe({
+      next: (audio) => {
+        this.soundBuffer.push(environment.apiUrl + '/serveur/download/' + audio);
+        if (!(this.sound.duration > 0 && !this.sound.paused)) {
+          this.sound.src = this.soundBuffer.pop();
+          var that = this.sound;
+          var thot = this;
+          this.sound.onloadeddata = function () {
+            that.play();
+            that.addEventListener('ended', function () {
+              var that = this;
+              if (thot.soundBuffer.length > 0) {
+                this.src = thot.soundBuffer.pop();
+                this.onloadeddata = function () {
+                  that.play();
+                }
+              }
+            })
+          }
+        }
+      }
+    });
+
+    listener.subscribe((event: { type: string; data: string; }) => {
+      if (event.type == "message") {
+        var txt: string = event.data;
+        var command: string = txt.split(":")[0];
+        var value: string = txt.split(":")[1];
+        if (command == "audio")
+          this.audioFlux.next(value);
+        else if (command == "update") {
+          if (value == "annonce") {
+            var oldAnnonce: Signal[];
+            oldAnnonce = Object.assign([], this.signals);
+            this.preparateurService.getSignalOrder(this.ROLE).pipe(take(1)).subscribe(result => {
+              this.signals = [];
+              var tpRecord: Record<string, OrderI[]> = groupBy(result, i => i.preOrder.destination);
+              for (let key in tpRecord) {
+                var tpTable = new Signal();
+                tpTable.tableName = key;
+
+                var reduce = tpRecord[key].reduce((a, b) => {
+                  var name: string = b.preOrder.stock.item.name + " " + b.annonce;
+                  if (!a.hasOwnProperty(name)) {
+                    a[name] = 0;
+                  }
+                  a[name]++;
+                  return a;
+                }, {});
+
+                var reducesExtended = Object.keys(reduce).map(k => {
+                  return { name: k, count: reduce[k] } as NameCountI;
+                });
+
+                for (let nc in reducesExtended) {
+                  tpTable.items.push(reducesExtended[nc]);
+                }
+
+                this.signals.push(tpTable);
+              }
+              this.change.detectChanges();
+              this.generateAnnonce(this.preparateurService.diffSignal(this.signals, oldAnnonce))
+            });
+
+          }
+          else if (value == "envoie") {
+            var oldAnnonce = cloneDeep(this.signals);
+            this.preparateurService.getSignalOrder(this.ROLE).pipe(take(1)).subscribe(result => {
+              this.signals = [];
+              var tpRecord: Record<string, OrderI[]> = groupBy(result, i => i.preOrder.destination);
+              for (let key in tpRecord) {
+                var tpTable = new Signal();
+                tpTable.tableName = key;
+
+                var reduce = tpRecord[key].reduce((a, b) => {
+                  var name: string = b.preOrder.stock.item.name + " " + b.annonce;
+                  if (!a.hasOwnProperty(name)) {
+                    a[name] = 0;
+                  }
+                  a[name]++;
+                  return a;
+                }, {});
+
+                var reducesExtended = Object.keys(reduce).map(k => {
+                  return { name: k, count: reduce[k] } as NameCountI;
+                });
+
+                for (let nc in reducesExtended) {
+                  tpTable.items.push(reducesExtended[nc]);
+                }
+
+                this.signals.push(tpTable);
+              }
+              this.change.detectChanges();
+              this.generateEnvoie(this.preparateurService.diffSignal(oldAnnonce, this.signals));
+            });
+
+            this.change.detectChanges();
+            this.initToTake();
+          }
+        }
+      }
+      if (event.type == "open") {
+        console.log("Connexion open");
+      }
+      if (event.type == "close") {
+        console.log("Connexion close");
+      }
+    });
+    setInterval(() => { this.verifyMic() }, 1000);
+  }
+
 }
 
 

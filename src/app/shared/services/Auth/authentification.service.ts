@@ -18,7 +18,9 @@ export class AuthentificationService {
   public admin: boolean = false;
   public manager: boolean = false;
   public editor: boolean = false;
-  public userName: string;
+  public userName(): string{
+    return localStorage.getItem("userName");
+  }
 
   constructor(private http: HttpClient, private userService: UserService) {
     this.currentConnexionISubject = new BehaviorSubject<ConnexionI>(JSON.parse(localStorage.getItem('currentConnexionI')));
@@ -41,7 +43,7 @@ export class AuthentificationService {
           this.admin = user.roles.includes("ROLE_ADMIN");
           this.manager = user.roles.includes("ROLE_MANAGER");
           this.editor = user.roles.includes("ROLE_EDITOR");
-          this.userName = user.username;
+          localStorage.setItem("userName", user.username);
         })
 
         return connexion;
